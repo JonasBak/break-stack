@@ -1,0 +1,8 @@
+[workspace]
+resolver = "2"
+
+members = [
+    "break_stack",
+    "break_stack_macros",
+    "testing",
+]
