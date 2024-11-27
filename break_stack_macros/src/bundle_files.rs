@@ -16,8 +16,8 @@ pub fn impl_bundle_files(ast: &syn::LitStr) -> TokenStream {
         .filter(|path| path.path().is_file())
         .filter_map(|path| {
             let p = path.path();
-            let relatie_path = p.strip_prefix(&dir).unwrap().to_str()?;
-            let inlude_path = p.to_str()?;
+            let relatie_path = p.strip_prefix(&dir).unwrap().to_str().unwrap();
+            let inlude_path = p.to_str().unwrap();
             Some(quote! {(#relatie_path, include_bytes!(#inlude_path))})
         });
     quote! {

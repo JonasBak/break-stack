@@ -248,6 +248,7 @@ dependencies = [
  "askama_axum",
  "axum",
  "break_stack_macros",
+ "serde",
  "sqlx",
  "thiserror",
 ]
