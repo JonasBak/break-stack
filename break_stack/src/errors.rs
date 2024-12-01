@@ -44,6 +44,12 @@ impl From<sqlx::Error> for ModelError {
     }
 }
 
+impl From<sqlx::Error> for AppError {
+    fn from(err: sqlx::Error) -> Self {
+        AppError::Model(err.into())
+    }
+}
+
 #[derive(Error, Debug)]
 pub enum AppError {
     #[error("model error")]
@@ -58,4 +64,35 @@ pub enum AppError {
     Internal(String),
     #[error("bad request: {0}")]
     BadRequest(String),
+}
+
+impl IntoResponse for AppError {
+    fn into_response(self) -> Response {
+        match self {
+            AppError::Model(ModelError::NotFound) | AppError::NotFound => {
+                (StatusCode::NOT_FOUND, "Not found").into_response()
+            }
+            AppError::Auth(AuthError::Unauthenticated) => (
+                StatusCode::UNAUTHORIZED,
+                "You need to log in to access this resource",
+            )
+                .into_response(),
+            AppError::Auth(AuthError::Unauthorized) => (
+                StatusCode::FORBIDDEN,
+                "You are not authorized to access this resource",
+            )
+                .into_response(),
+            AppError::Internal(_)
+            | AppError::Model(ModelError::Internal(_))
+            | AppError::Model(ModelError::DB(_))
+            | AppError::Auth(AuthError::Model(_)) => {
+                (StatusCode::INTERNAL_SERVER_ERROR, "Something went wrong").into_response()
+            }
+            AppError::Login => (StatusCode::INTERNAL_SERVER_ERROR, "Login failed").into_response(),
+            AppError::Model(ModelError::Conflict) => {
+                (StatusCode::IM_A_TEAPOT, "TODO handler not implemented").into_response()
+            }
+            AppError::BadRequest(_) => (StatusCode::BAD_REQUEST, "Bad request").into_response(),
+        }
+    }
 }

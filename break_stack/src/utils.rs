@@ -40,6 +40,19 @@ pub mod serde {
         let string = String::deserialize(de)?;
         T::from_str(string.as_str()).map_err(serde::de::Error::custom)
     }
+
+    pub fn vec_from_string<'de, D, T>(de: D) -> Result<Vec<T>, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+        T: std::str::FromStr,
+        T::Err: std::fmt::Display,
+    {
+        let v: Result<Vec<T>, _> = Vec::<String>::deserialize(de)?
+            .into_iter()
+            .map(|elem| T::from_str(&elem))
+            .collect();
+        v.map_err(serde::de::Error::custom)
+    }
 }
 
 pub mod askama {

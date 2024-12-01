@@ -198,6 +198,8 @@ fn component_ref_impl_from_component(ast: &syn::DeriveInput) -> TokenStream {
             .expect("only named fields are supported");
         if field_is_primitive(field) {
             quote!(#ident: value.#ident)
+        } else if matches!(field_type_path_ident(field), Some(ident) if ident == "Option") {
+            quote!(#ident: value.#ident.as_ref())
         } else {
             quote!(#ident: &value.#ident)
         }
@@ -213,6 +215,14 @@ fn component_ref_impl_from_component(ast: &syn::DeriveInput) -> TokenStream {
         }
     };
     decl.into()
+}
+
+fn field_type_path_ident(field: &Field) -> Option<&Ident> {
+    let ty = &field.ty;
+    match ty {
+        Type::Path(type_path) => type_path.path.segments.first().map(|s| &s.ident),
+        _ => None,
+    }
 }
 
 fn component_ref_field_type(field: &Field, ref_primitive: bool) -> TokenStream {
@@ -560,7 +570,7 @@ mod test {
                     field_b: value.field_b,
                     field_c: &value.field_c,
                     field_d: value.field_d,
-                    field_e: &value.field_e,
+                    field_e: value.field_e.as_ref(),
                     field_f: &value.field_f,
                     field_g: &value.field_g,
                 }

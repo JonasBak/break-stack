@@ -1777,6 +1777,8 @@ dependencies = [
  "askama_axum",
  "axum",
  "break_stack",
+ "serde",
+ "serde_json",
 ]
 
 [[package]]

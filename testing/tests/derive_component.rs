@@ -4,13 +4,15 @@ use break_stack::components::*;
 #[template(source = r#"Hello {{ name }}"#, ext = "html")]
 pub struct TestingComponent {
     name: String,
+    suffix: Option<char>,
 }
 
 #[test]
 fn test_component() {
     assert_eq!(
         TestingComponent {
-            name: "World".into()
+            name: "World".into(),
+            suffix: None,
         }
         .as_ref()
         .to_string(),
