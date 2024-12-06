@@ -1,8 +1,5 @@
 use proc_macro2::TokenStream;
-use quote::{format_ident, quote, quote_spanned};
-use std::collections::BTreeMap;
-use syn::spanned::Spanned;
-use syn::{Attribute, DataStruct, Field, Fields, FieldsNamed, Ident, Type};
+use quote::quote;
 
 pub fn impl_bundle_files(ast: &syn::LitStr) -> TokenStream {
     let base_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();

@@ -22,7 +22,7 @@ fn test_component() {
 
 #[derive(Component)]
 #[template(
-    source = r#"{{ field_a }}{% for b in field_b %} {{ b}}{% endfor %} {{ field_a }}"#,
+    source = r#"{{ field_a }}{% for b in field_b.clone() %} {{ b}}{% endfor %} {{ field_a }}"#,
     ext = "html"
 )]
 struct TestingNestedInner {
@@ -65,7 +65,7 @@ fn test_nested() {
 
 #[derive(Component)]
 #[template(
-    source = r#"{{ count }} {% if count < 5_u8 %}{{ RecursiveComponentRef::new((count + 1).clone(), list.clone()) }}{% else %}{% for b in list %}{{ b}}{% endfor %}{% endif %}"#,
+    source = r#"{{ count }} {% if count < 5_u8 %}{{ RecursiveComponentRef::new((count + 1).clone(), list.clone()) }}{% else %}{% for b in list.clone() %}{{ b}}{% endfor %}{% endif %}"#,
     ext = "html"
 )]
 struct RecursiveComponent {

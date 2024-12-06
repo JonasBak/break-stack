@@ -268,7 +268,7 @@ enum GenericForRef {
 fn component_ref_generic_decl((ref ident, ref g): &(Ident, GenericForRef)) -> TokenStream {
     let r = match g {
         GenericForRef::Vec(t) => {
-            quote_spanned! {ident.span()=>: IntoIterator<Item = &'a #t> + Copy}
+            quote_spanned! {ident.span()=>: IntoIterator<Item = &'a #t> + Clone}
         }
     };
     quote! {#ident #r}
@@ -464,7 +464,7 @@ mod test {
             .collect();
         let expected = [(
             "field_g".to_string(),
-            "FieldG : IntoIterator < Item = & 'a Abc > + Copy".to_string(),
+            "FieldG : IntoIterator < Item = & 'a Abc > + Clone".to_string(),
         )];
         assert_eq!(result, expected);
     }
@@ -492,7 +492,7 @@ mod test {
             r#"
             #[derive(::askama_axum::Template)]
             #[template(source = r_"Hello World"_, ext = "html")]
-            pub struct MyComponentRef<'a, FieldG: IntoIterator<Item = &'a Abc> + Copy> {
+            pub struct MyComponentRef<'a, FieldG: IntoIterator<Item = &'a Abc> + Clone> {
                 pub field_a: &'a A,
                 pub field_b: bool,
                 pub field_c: &'a str,
@@ -525,7 +525,7 @@ mod test {
         let result = remove_whitespace(&component_ref_impl(&derive_input).to_string());
         let expected = remove_whitespace(
             r#"
-            impl<'a, FieldG: IntoIterator<Item = &'a Abc> + Copy> MyComponentRef<'a, FieldG> {
+            impl<'a, FieldG: IntoIterator<Item = &'a Abc> + Clone> MyComponentRef<'a, FieldG> {
                 pub fn new(field_a: &'a A, field_b: bool, field_c: &'a str, field_d: usize, field_e: Option<&'a Abc>, field_f: &'a Result<A, B>, field_g: FieldG) -> Self {
                     Self {
                         field_a,
