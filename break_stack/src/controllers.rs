@@ -1,14 +1,9 @@
-use crate::models::DBConn;
 use crate::auth::UserId;
 use crate::components::Component;
-use crate::models::*;
 use crate::errors::*;
-use axum::{
-    extract::Path,
-    http::header::HeaderValue,
-    response::{IntoResponse, Response},
-    Form,
-};
+use crate::models::DBConn;
+use crate::models::*;
+use axum::{extract::Path, http::header::HeaderValue, response::Response, Form};
 
 pub trait ModelController: Send + Sync + Sized {
     type Model: Send + Sync + Sized;
@@ -27,7 +22,6 @@ pub trait InitController {
         user_id: Option<UserId>,
     ) -> impl std::future::Future<Output = AppResult<Response>> + Send;
 }
-
 
 pub async fn model_controller_read<H: ModelController<Model: AuthModelRead>>(
     mut conn: DBConn,

@@ -120,3 +120,117 @@ pub trait AuthModelCreate: ModelCreate {
         data: &<Self as ModelCreate>::Create,
     ) -> impl std::future::Future<Output = Result<(), AuthError>> + Send;
 }
+
+pub mod testutils {
+    #[macro_export]
+    macro_rules! model_read_test_cases {
+        ( $model:ident, $conn:expr, [ $( $case_name:literal : $id:literal => $expect_pat:pat $(if $cond:expr)?, )* ] ) => {
+            $(
+                {
+                    println!("Running case '{}'", $case_name);
+                    let id = $id;
+                    let entry = <$model as break_stack::models::ModelRead>::read($conn, id)
+                        .await
+                        .unwrap();
+                    if !matches!(entry, $expect_pat $(if $cond)*) {
+                        panic!("Case '{}'\nEntry returned by ModelRead::read didn't match expected output:\nExpected output to match: {}\nGot entry: {:?}", $case_name, stringify!($expect_pat $(if $cond)*), entry);
+                    }
+                }
+            )*
+        }
+    }
+    pub use model_read_test_cases;
+
+    #[macro_export]
+    macro_rules! model_write_test_cases {
+        ( $model:ident, $conn:expr, [ $( $case_name:literal : ($id:literal, $write_data:expr) => $expect_pat:pat $(if $cond:expr)?, )* ] ) => {
+            $(
+                {
+                    println!("Running case '{}'", $case_name);
+                    let id = $id;
+                    let entry = <$model as break_stack::models::ModelWrite>::write($conn, id, $write_data)
+                        .await
+                        .unwrap();
+                    if !matches!(entry, $expect_pat $(if $cond)*) {
+                        panic!("Case '{}'\nEntry returned by ModelWrite::write didn't match expected output:\nExpected output to match: {}\nGot entry: {:?}", $case_name, stringify!($expect_pat $(if $cond)*), entry);
+                    }
+                }
+            )*
+        }
+    }
+    pub use model_write_test_cases;
+
+    #[macro_export]
+    macro_rules! model_create_test_cases {
+        ( $model:ident, $conn:expr, [ $( $case_name:literal : $create_data:expr => $expect_pat:pat $(if $cond:expr)?, )* ] ) => {
+            $(
+                {
+                    println!("Running case '{}'", $case_name);
+                    let entry = <$model as break_stack::models::ModelCreate>::create($conn, $create_data)
+                        .await
+                        .unwrap();
+                    if !matches!(entry, $expect_pat $(if $cond)*) {
+                        panic!("Case '{}'\nEntry returned by ModelCreate::create didn't match expected output:\nExpected output to match: {}\nGot entry: {:?}", $case_name, stringify!($expect_pat $(if $cond)*), entry);
+                    }
+                }
+            )*
+        }
+    }
+    pub use model_create_test_cases;
+
+    #[macro_export]
+    macro_rules! auth_model_read_test_cases {
+        ( $model:ident, $conn:expr, [ $( $case_name:literal : ($id:literal, $user:expr) => $expect_pat:pat $(if $cond:expr)?, )* ] ) => {
+            $(
+                {
+                    println!("Running case '{}'", $case_name);
+                    let id = $id;
+                    let user = $user;
+                    let res = <$model as break_stack::models::AuthModelRead>::can_read($conn, id, user)
+                        .await;
+                    if !matches!(res, $expect_pat $(if $cond)*) {
+                        panic!("Case '{}'\nResult returned by AuthModelRead::can_read didn't match expected output:\nExpected output to match: {}\nGot: {:?}", $case_name, stringify!($expect_pat $(if $cond)*), res);
+                    }
+                }
+            )*
+        }
+    }
+    pub use auth_model_read_test_cases;
+
+    #[macro_export]
+    macro_rules! auth_model_write_test_cases {
+        ( $model:ident, $conn:expr, [ $( $case_name:literal : ($id:literal, $user:expr, $data:expr) => $expect_pat:pat $(if $cond:expr)?, )* ] ) => {
+            $(
+                {
+                    println!("Running case '{}'", $case_name);
+                    let id = $id;
+                    let user = $user;
+                    let res = <$model as break_stack::models::AuthModelWrite>::can_write($conn, id, user, $data)
+                        .await;
+                    if !matches!(res, $expect_pat $(if $cond)*) {
+                        panic!("Case '{}'\nResult returned by AuthModelWrite::can_write didn't match expected output:\nExpected output to match: {}\nGot: {:?}", $case_name, stringify!($expect_pat $(if $cond)*), res);
+                    }
+                }
+            )*
+        }
+    }
+    pub use auth_model_write_test_cases;
+
+    #[macro_export]
+    macro_rules! auth_model_create_test_cases {
+        ( $model:ident, $conn:expr, [ $( $case_name:literal : ($user:expr, $data:expr) => $expect_pat:pat $(if $cond:expr)?, )* ] ) => {
+            $(
+                {
+                    println!("Running case '{}'", $case_name);
+                    let user = $user;
+                    let res = <$model as break_stack::models::AuthModelCreate>::can_create($conn, user, $data)
+                        .await;
+                    if !matches!(res, $expect_pat $(if $cond)*) {
+                        panic!("Case '{}'\nResult returned by AuthModelCreate::can_create didn't match expected output:\nExpected output to match: {}\nGot: {:?}", $case_name, stringify!($expect_pat $(if $cond)*), res);
+                    }
+                }
+            )*
+        }
+    }
+    pub use auth_model_create_test_cases;
+}
