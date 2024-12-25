@@ -1,5 +1,6 @@
 use crate::auth::UserId;
 use crate::errors::{AuthError, ModelError};
+pub use break_stack_macros::{Model, ModelCreate, ModelRead, ModelWrite};
 
 pub type DBConn = sqlx::pool::PoolConnection<sqlx::Sqlite>;
 
@@ -17,7 +18,7 @@ pub trait WithOwnerModel: Sized + Model {
     fn owner(
         conn: &mut DBConn,
         id: i64,
-    ) -> impl std::future::Future<Output = Result<i64, ModelError>> + Send;
+    ) -> impl std::future::Future<Output = Result<Option<i64>, ModelError>> + Send;
     fn all_for_owner(
         conn: &mut DBConn,
         user_id: i64,
@@ -119,6 +120,53 @@ pub trait AuthModelCreate: ModelCreate {
         user_id: Option<UserId>,
         data: &<Self as ModelCreate>::Create,
     ) -> impl std::future::Future<Output = Result<(), AuthError>> + Send;
+}
+
+pub trait OwnerAuthModelRead: WithOwnerModel + ModelRead {}
+
+impl<Model: OwnerAuthModelRead> AuthModelRead for Model {
+    async fn can_read(
+        conn: &mut DBConn,
+        id: i64,
+        user_id: Option<UserId>,
+    ) -> Result<(), AuthError> {
+        let Some(user_id) = user_id else {
+            return Err(AuthError::Unauthenticated);
+        };
+        let Some(owner) = Model::owner(conn, id).await? else {
+            return Err(AuthError::Unauthorized);
+        };
+
+        if owner != *user_id {
+            return Err(AuthError::Unauthorized);
+        }
+
+        Ok(())
+    }
+}
+
+pub trait OwnerAuthModelWrite: WithOwnerModel + ModelWrite {}
+
+impl<Model: OwnerAuthModelWrite> AuthModelWrite for Model {
+    async fn can_write(
+        conn: &mut DBConn,
+        id: i64,
+        user_id: Option<UserId>,
+        _data: &<Self as ModelWrite>::Write,
+    ) -> Result<(), AuthError> {
+        let Some(user_id) = user_id else {
+            return Err(AuthError::Unauthenticated);
+        };
+        let Some(owner) = Model::owner(conn, id).await? else {
+            return Err(AuthError::Unauthorized);
+        };
+
+        if owner != *user_id {
+            return Err(AuthError::Unauthorized);
+        }
+
+        Ok(())
+    }
 }
 
 pub mod testutils {

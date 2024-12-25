@@ -1,18 +1,25 @@
 use break_stack::auth::UserId;
 use break_stack::errors::*;
-use break_stack::models::DBConn;
 use break_stack::models::*;
 use serde::Deserialize;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Model, ModelRead, ModelWrite, ModelCreate)]
+#[model(name = "TodoItem")]
+#[model_read(query = "SELECT * FROM todo_items WHERE id = ?")]
+#[model_write(
+    data_type = "TodoItemWrite",
+    query = "UPDATE todo_items SET description = ?, done = ? WHERE id = ? RETURNING *",
+    fields = "data.description, data.done, id"
+)]
+#[model_create(
+    data_type = "TodoItemCreate",
+    query = "INSERT INTO todo_items (description, done) VALUES (?, FALSE) RETURNING *",
+    fields = "data.description"
+)]
 pub struct TodoItemModel {
     pub id: i64,
     pub description: String,
     pub done: bool,
-}
-
-impl Model for TodoItemModel {
-    const MODEL_NAME: &'static str = "TodoItem";
 }
 
 impl TodoItemModel {
@@ -25,16 +32,6 @@ impl TodoItemModel {
     }
 }
 
-impl ModelRead for TodoItemModel {
-    async fn read(conn: &mut DBConn, id: i64) -> Result<Option<Self>, ModelError> {
-        let item = sqlx::query_as!(Self, "SELECT * FROM todo_items WHERE id = ?", id)
-            .fetch_optional(&mut **conn)
-            .await?;
-
-        Ok(item)
-    }
-}
-
 #[derive(Deserialize)]
 pub struct TodoItemWrite {
     pub description: String,
@@ -42,47 +39,9 @@ pub struct TodoItemWrite {
     pub done: bool,
 }
 
-impl ModelWrite for TodoItemModel {
-    type Write = TodoItemWrite;
-
-    async fn write(
-        conn: &mut DBConn,
-        id: i64,
-        data: Self::Write,
-    ) -> Result<Option<Self>, ModelError> {
-        let item = sqlx::query_as!(
-            Self,
-            "UPDATE todo_items SET description = ?, done = ? WHERE id = ? RETURNING *",
-            data.description,
-            data.done,
-            id
-        )
-        .fetch_optional(&mut **conn)
-        .await?;
-
-        Ok(item)
-    }
-}
-
 #[derive(Deserialize)]
 pub struct TodoItemCreate {
     pub description: String,
-}
-
-impl ModelCreate for TodoItemModel {
-    type Create = TodoItemCreate;
-
-    async fn create(conn: &mut DBConn, data: Self::Create) -> Result<Self, ModelError> {
-        let item = sqlx::query_as!(
-            Self,
-            "INSERT INTO todo_items (description, done) VALUES (?, FALSE) RETURNING *",
-            data.description,
-        )
-        .fetch_one(&mut **conn)
-        .await?;
-
-        Ok(item)
-    }
 }
 
 impl AuthModelRead for TodoItemModel {
