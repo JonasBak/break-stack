@@ -1,6 +1,17 @@
 use break_stack::components::*;
 
 #[derive(Component)]
+#[template(source = r#"Hello"#, ext = "html")]
+pub struct CompilingEmptyComponent {}
+
+#[derive(Component)]
+#[template(source = r#"Hello"#, ext = "html")]
+pub struct CompilingPrimitiveComponent {
+    pub a: bool,
+    pub b: u8,
+}
+
+#[derive(Component)]
 #[template(source = r#"Hello {{ name }}"#, ext = "html")]
 pub struct TestingComponent {
     name: String,

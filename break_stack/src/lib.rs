@@ -5,3 +5,4 @@ pub mod errors;
 pub mod hot_reload;
 pub mod models;
 pub mod utils;
+pub mod routes;

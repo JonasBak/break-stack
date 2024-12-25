@@ -1,0 +1,12 @@
+<!doctype html>
+<html>
+  <head>
+    <title>Todos</title>
+    <script src="https://unpkg.com/htmx.org@2.0.3" integrity="sha384-0895/pl2MU10Hqc6jd4RvrthNlDiE9U1tWmX7WRESftEDRosgxNsQG/Ze9YMRzHq" crossorigin="anonymous"></script>
+    {{ break_stack::hot_reload::hot_reload_script_tag()|safe }}
+    {% block head %}{% endblock %}
+  </head>
+  <body>
+    {% block body %}{% endblock %}
+  </body>
+</html>

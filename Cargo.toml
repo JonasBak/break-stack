@@ -5,4 +5,11 @@ members = [
     "break_stack",
     "break_stack_macros",
     "testing",
+    "examples/*",
+]
+
+default-members = [
+    "break_stack",
+    "break_stack_macros",
+    "testing",
 ]

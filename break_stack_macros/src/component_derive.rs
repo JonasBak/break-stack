@@ -37,6 +37,22 @@ pub fn impl_component_macro(ast: &syn::DeriveInput) -> TokenStream {
     gen.into()
 }
 
+fn input_needs_lifetime(ast: &syn::DeriveInput) -> bool {
+    match &ast.data {
+        syn::Data::Struct(DataStruct {
+            fields: Fields::Named(fields),
+            ..
+        }) => fields
+            .named
+            .iter()
+            .filter(|field| !field_is_primitive(field))
+            .next()
+            .is_some(),
+
+        _ => false,
+    }
+}
+
 fn declare_component_ref(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
     let name = format_ident!("{}Ref", name);
@@ -66,10 +82,12 @@ fn declare_component_ref(ast: &syn::DeriveInput) -> TokenStream {
 
     let template_attr = template_attributes(&ast.attrs);
 
+    let lifetime = input_needs_lifetime(ast).then(|| quote! {'a}).into_iter();
+
     let decl = quote! {
         #[derive(::askama_axum::Template)]
         #template_attr
-        pub struct #name<'a #(, #generics_decl)*> {
+        pub struct #name<#(#lifetime)* #(, #generics_decl)*> {
             #(#fields_decl,)*
         }
     };
@@ -113,8 +131,11 @@ fn component_ref_impl(ast: &syn::DeriveInput) -> TokenStream {
         quote! {#ident}
     });
 
+    let lifetime = input_needs_lifetime(ast).then(|| quote! {'a}).into_iter();
+    let lifetime2 = lifetime.clone();
+
     let decl = quote! {
-        impl <'a #(, #generics_decl)*> #name <'a #(, #generic_names)*> {
+        impl <#(#lifetime)*  #(, #generics_decl)*> #name <#(#lifetime2)* #(, #generic_names)*> {
             pub fn new(#(#args_decl),*) -> Self {
                 Self {
                     #(#args,)*
@@ -141,8 +162,11 @@ fn component_ref_impl_component(ast: &syn::DeriveInput) -> TokenStream {
 
     let generic_names = generics.values().map(|(generic, _)| generic);
 
+    let lifetime = input_needs_lifetime(ast).then(|| quote! {'a}).into_iter();
+    let lifetime2 = lifetime.clone();
+
     let decl = quote! {
-        impl<'a #(, #generics_decl)*> Component for #name<'a #(, #generic_names)*> {}
+        impl<#(#lifetime)* #(, #generics_decl)*> Component for #name<#(#lifetime2)* #(, #generic_names)*> {}
     };
     decl.into()
 }
@@ -163,8 +187,11 @@ fn component_ref_impl_component_as_ref(ast: &syn::DeriveInput) -> TokenStream {
 
     let generic_names = generics.values().map(|(generic, _)| generic);
 
+    let lifetime = input_needs_lifetime(ast).then(|| quote! {'a}).into_iter();
+    let lifetime2 = lifetime.clone();
+
     let decl = quote! {
-        impl<'a #(, #generics_decl)*> ComponentAsRef for #name<'a #(, #generic_names)*> {
+        impl<#(#lifetime)* #(, #generics_decl)*> ComponentAsRef for #name<#(#lifetime2)* #(, #generic_names)*> {
             type Ref = Self;
 
             fn as_ref(self) -> Self::Ref {
@@ -205,8 +232,10 @@ fn component_ref_impl_from_component(ast: &syn::DeriveInput) -> TokenStream {
         }
     });
 
+    let lifetime = input_needs_lifetime(ast).then(|| quote! {'a}).into_iter();
+
     let decl = quote! {
-        impl<'a> From<&'a #name> for #name_ref<'a #(, &'a #generics_ext)*> {
+        impl<'a> From<&'a #name> for #name_ref<#(#lifetime)* #(, &'a #generics_ext)*> {
             fn from(value: &'a #name) -> Self {
                 Self {
                     #(#fields,)*
@@ -360,9 +389,12 @@ fn component_impl_component_as_ref(ast: &syn::DeriveInput) -> TokenStream {
         GenericForRef::Vec(ty) => quote! {Vec<#ty>},
     });
 
+
+    let lifetime = input_needs_lifetime(ast).then(|| quote! {'a}).into_iter();
+
     let decl = quote! {
         impl<'a> ComponentAsRef for &'a #name {
-            type Ref = #name_ref<'a #(, &'a #generics_ext)*>;
+            type Ref = #name_ref<#(#lifetime)* #(, &'a #generics_ext)*>;
             fn as_ref(self) -> Self::Ref {
                 self.into()
             }
@@ -500,6 +532,54 @@ mod test {
                 pub field_e: Option<&'a Abc>,
                 pub field_f: &'a Result<A, B>,
                 pub field_g: FieldG,
+            }"#,
+        );
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_declare_component_ref_no_fields() {
+        let derive_input = syn::parse_str(
+            r#"
+        #[template(source = r_"Hello World"_, ext = "html")]
+        struct MyComponent {
+        }
+        "#,
+        )
+        .unwrap();
+
+        let result = remove_whitespace(&declare_component_ref(&derive_input).to_string());
+        let expected = remove_whitespace(
+            r#"
+            #[derive(::askama_axum::Template)]
+            #[template(source = r_"Hello World"_, ext = "html")]
+            pub struct MyComponentRef<> {
+            }"#,
+        );
+        assert_eq!(result, expected);
+    }
+
+    #[test]
+    fn test_declare_component_ref_only_primitives() {
+        let derive_input = syn::parse_str(
+            r#"
+        #[template(source = r_"Hello World"_, ext = "html")]
+        struct MyComponent {
+            pub field_a: bool,
+            pub field_b: usize,
+        }
+        "#,
+        )
+        .unwrap();
+
+        let result = remove_whitespace(&declare_component_ref(&derive_input).to_string());
+        let expected = remove_whitespace(
+            r#"
+            #[derive(::askama_axum::Template)]
+            #[template(source = r_"Hello World"_, ext = "html")]
+            pub struct MyComponentRef<> {
+                pub field_a: bool,
+                pub field_b: usize,
             }"#,
         );
         assert_eq!(result, expected);
