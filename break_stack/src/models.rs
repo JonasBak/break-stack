@@ -1,6 +1,6 @@
 use crate::auth::UserId;
 use crate::errors::{AuthError, ModelError};
-pub use break_stack_macros::{Model, ModelCreate, ModelRead, ModelWrite};
+pub use break_stack_macros::{Model, ModelCreate, ModelRead, ModelWrite, WithOwnerModel};
 
 pub type DBConn = sqlx::pool::PoolConnection<sqlx::Sqlite>;
 

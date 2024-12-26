@@ -37,6 +37,13 @@ pub fn model_create_derive(input: proc_macro::TokenStream) -> proc_macro::TokenS
     model_derive::impl_model_create_macro(&ast).into()
 }
 
+#[proc_macro_derive(WithOwnerModel, attributes(with_owner_model))]
+pub fn with_owner_model_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
+    let ast = syn::parse(input).unwrap();
+
+    model_derive::impl_with_owner_model_macro(&ast).into()
+}
+
 #[proc_macro]
 pub fn bundle_files(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = syn::parse(input).unwrap();

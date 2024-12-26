@@ -26,7 +26,10 @@ fn get_attr(ast: &syn::DeriveInput, attr_name: &str) -> Option<HashMap<String, L
             .into_iter()
             .map(|kv| {
                 (
-                    kv.path.require_ident().expect("key should be simple ident").to_string(),
+                    kv.path
+                        .require_ident()
+                        .expect("key should be simple ident")
+                        .to_string(),
                     match kv.value {
                         Expr::Lit(syn::ExprLit {
                             lit: Lit::Str(lit_str),
@@ -45,7 +48,9 @@ pub fn impl_model_macro(ast: &syn::DeriveInput) -> TokenStream {
 
     let args = get_attr(ast, "model").expect("deriving Model requires a model attribute");
 
-    let model_name = args.get("name").expect("model attribute requires a field called name");
+    let model_name = args
+        .get("name")
+        .expect("model attribute requires a field called name");
 
     let gen = quote! {
         impl Model for #name {
@@ -66,9 +71,12 @@ pub fn impl_model_macro(ast: &syn::DeriveInput) -> TokenStream {
 pub fn impl_model_read_macro(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
 
-    let args = get_attr(ast, "model_read").expect("deriving ModelRead requires a model_read attribute");
+    let args =
+        get_attr(ast, "model_read").expect("deriving ModelRead requires a model_read attribute");
 
-    let query = args.get("query").expect("model_read attribute requires a field called query");
+    let query = args
+        .get("query")
+        .expect("model_read attribute requires a field called query");
 
     let gen = quote! {
         impl ModelRead for #name {
@@ -95,9 +103,12 @@ pub fn impl_model_read_macro(ast: &syn::DeriveInput) -> TokenStream {
 pub fn impl_model_write_macro(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
 
-    let args = get_attr(ast, "model_write").expect("deriving ModelWrite requires a model_write attribute");
+    let args =
+        get_attr(ast, "model_write").expect("deriving ModelWrite requires a model_write attribute");
 
-    let query = args.get("query").expect("model_write attribute requires a field called query");
+    let query = args
+        .get("query")
+        .expect("model_write attribute requires a field called query");
     let data_type = args
         .get("data_type")
         .expect("model_write attribute requires a field called data_type")
@@ -141,13 +152,15 @@ pub fn impl_model_write_macro(ast: &syn::DeriveInput) -> TokenStream {
     gen.into()
 }
 
-
 pub fn impl_model_create_macro(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
 
-    let args = get_attr(ast, "model_create").expect("deriving ModelCreate requires a model_create attribute");
+    let args = get_attr(ast, "model_create")
+        .expect("deriving ModelCreate requires a model_create attribute");
 
-    let query = args.get("query").expect("model_create attribute requires a field called query");
+    let query = args
+        .get("query")
+        .expect("model_create attribute requires a field called query");
     let data_type = args
         .get("data_type")
         .expect("model_create attribute requires a field called data_type")
@@ -175,6 +188,55 @@ pub fn impl_model_create_macro(ast: &syn::DeriveInput) -> TokenStream {
                 .fetch_one(&mut **conn)
                 .await?;
                 Ok(t)
+            }
+        }
+    };
+
+    if std::env::var("BREAK_STACK_PRINT_DERIVE")
+        .map(|s| s == "1")
+        .unwrap_or(false)
+    {
+        println!("Generated code: {}", gen.clone().to_string());
+    }
+
+    gen.into()
+}
+
+pub fn impl_with_owner_model_macro(ast: &syn::DeriveInput) -> TokenStream {
+    let name = &ast.ident;
+
+    let args = get_attr(ast, "with_owner_model")
+        .expect("deriving WithOwnerModel requires a with_owner_model attribute");
+
+    let query_owner = args
+        .get("query_owner")
+        .expect("with_owner_model attribute requires a field called query_owner");
+
+    let query_all = args
+        .get("query_all")
+        .expect("with_owner_model attribute requires a field called query_all");
+
+    let gen = quote! {
+        impl WithOwnerModel for #name {
+            async fn owner(
+                conn: &mut DBConn,
+                id: i64,
+            ) -> Result<Option<i64>, ::break_stack::errors::ModelError> {
+                let row = sqlx::query!(#query_owner, id)
+                    .fetch_optional(&mut **conn)
+                    .await?;
+
+                Ok(row.map(|row| row.owner))
+            }
+            async fn all_for_owner(
+                conn: &mut DBConn,
+                user_id: i64,
+            ) -> Result<Vec<Self>, ::break_stack::errors::ModelError> {
+                let rows = sqlx::query_as!(Self, #query_all, user_id)
+                    .fetch_all(&mut **conn)
+                    .await?;
+
+                Ok(rows)
             }
         }
     };
@@ -339,6 +401,55 @@ mod test {
                     .fetch_one(&mut **conn)
                     .await?;
                     Ok(t)
+                }
+            }
+            "#;
+
+        assert_eq!(
+            remove_whitespace(&result.to_string()),
+            remove_whitespace(&expected.to_string())
+        );
+    }
+
+    #[test]
+    fn test_impl_with_owner_model_macro_macro() {
+        let input = syn::parse_str::<syn::DeriveInput>(
+            r#"
+            #[derive(WithOwnerModel)]
+            #[with_owner_model(
+                query_owner = "SELECT owner FROM test WHERE id = ?",
+                query_all = "SELECT * FROM test WHERE owner = ?",
+            )]
+            struct TestModel {
+                pub id: i64,
+                pub field: String,
+            }
+            "#,
+        )
+        .unwrap();
+
+        let result = impl_with_owner_model_macro(&input);
+        let expected = r#"
+            impl WithOwnerModel for TestModel {
+                async fn owner(
+                    conn: &mut DBConn,
+                    id: i64,
+                ) -> Result<Option<i64>, ::break_stack::errors::ModelError> {
+                    let row = sqlx::query!("SELECT owner FROM test WHERE id = ?", id)
+                        .fetch_optional(&mut **conn)
+                        .await?;
+
+                    Ok(row.map(|row| row.owner))
+                }
+                async fn all_for_owner(
+                    conn: &mut DBConn,
+                    user_id: i64,
+                ) -> Result<Vec<Self>, ::break_stack::errors::ModelError> {
+                    let rows = sqlx::query_as!(Self, "SELECT * FROM test WHERE owner = ?", user_id)
+                        .fetch_all(&mut **conn)
+                        .await?;
+
+                    Ok(rows)
                 }
             }
             "#;

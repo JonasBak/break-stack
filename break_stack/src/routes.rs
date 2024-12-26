@@ -9,8 +9,8 @@ macro_rules! build_router {
                 }
             )*
         }
-        pub fn router() -> Router<$app_state> {
-            let mut router = Router::new();
+        pub fn router() -> ::axum::routing::Router<$app_state> {
+            let mut router = ::axum::routing::Router::new();
             $(
                 router = {
                     let path = format!($path_fmt, $($($fmt_arg),*)*);
