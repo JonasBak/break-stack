@@ -5,6 +5,8 @@ pub use break_stack_macros::{Model, ModelCreate, ModelRead, ModelWrite, WithOwne
 pub type DBConn = sqlx::pool::PoolConnection<sqlx::Sqlite>;
 
 pub trait Model {
+    type ID: Copy + Send + Sync;
+
     const MODEL_NAME: &'static str;
     fn event_created() -> String {
         format!("{}Created", Self::MODEL_NAME)
@@ -17,7 +19,7 @@ pub trait Model {
 pub trait WithOwnerModel: Sized + Model {
     fn owner(
         conn: &mut DBConn,
-        id: i64,
+        id: <Self as Model>::ID,
     ) -> impl std::future::Future<Output = Result<Option<i64>, ModelError>> + Send;
     fn all_for_owner(
         conn: &mut DBConn,
@@ -41,11 +43,11 @@ pub trait WithRelatedModel: Sized + Model {
 pub trait ModelRead: Sized + Model {
     fn read(
         conn: &mut DBConn,
-        id: i64,
+        id: <Self as Model>::ID,
     ) -> impl std::future::Future<Output = Result<Option<Self>, ModelError>> + Send;
     fn read_one(
         conn: &mut DBConn,
-        id: i64,
+        id: <Self as Model>::ID,
     ) -> impl std::future::Future<Output = Result<Self, ModelError>> + Send {
         async move {
             Self::read(conn, id)
@@ -63,12 +65,12 @@ pub trait ModelWrite: Sized + Model {
     type Write: Sized + Send + Sync;
     fn write(
         conn: &mut DBConn,
-        id: i64,
+        id: <Self as Model>::ID,
         data: Self::Write,
     ) -> impl std::future::Future<Output = Result<Option<Self>, ModelError>> + Send;
     fn write_one(
         conn: &mut DBConn,
-        id: i64,
+        id: <Self as Model>::ID,
         data: Self::Write,
     ) -> impl std::future::Future<Output = Result<Self, ModelError>> + Send {
         async move {
@@ -94,7 +96,7 @@ pub trait ModelCreate: Sized + Model {
 pub trait AuthModelRead: ModelRead {
     fn can_read(
         conn: &mut DBConn,
-        id: i64,
+        id: <Self as Model>::ID,
         user_id: Option<UserId>,
     ) -> impl std::future::Future<Output = Result<(), AuthError>> + Send;
 }
@@ -105,7 +107,7 @@ pub trait AuthModelRead: ModelRead {
 pub trait AuthModelWrite: ModelWrite {
     fn can_write(
         conn: &mut DBConn,
-        id: i64,
+        id: <Self as Model>::ID,
         user_id: Option<UserId>,
         data: &<Self as ModelWrite>::Write,
     ) -> impl std::future::Future<Output = Result<(), AuthError>> + Send;
@@ -124,16 +126,16 @@ pub trait AuthModelCreate: ModelCreate {
 
 pub trait OwnerAuthModelRead: WithOwnerModel + ModelRead {}
 
-impl<Model: OwnerAuthModelRead> AuthModelRead for Model {
+impl<ModelImpl: OwnerAuthModelRead> AuthModelRead for ModelImpl {
     async fn can_read(
         conn: &mut DBConn,
-        id: i64,
+        id: <Self as Model>::ID,
         user_id: Option<UserId>,
     ) -> Result<(), AuthError> {
         let Some(user_id) = user_id else {
             return Err(AuthError::Unauthenticated);
         };
-        let Some(owner) = Model::owner(conn, id).await? else {
+        let Some(owner) = ModelImpl::owner(conn, id).await? else {
             return Err(AuthError::Unauthorized);
         };
 
@@ -147,17 +149,17 @@ impl<Model: OwnerAuthModelRead> AuthModelRead for Model {
 
 pub trait OwnerAuthModelWrite: WithOwnerModel + ModelWrite {}
 
-impl<Model: OwnerAuthModelWrite> AuthModelWrite for Model {
+impl<ModelImpl: OwnerAuthModelWrite> AuthModelWrite for ModelImpl {
     async fn can_write(
         conn: &mut DBConn,
-        id: i64,
+        id: <Self as Model>::ID,
         user_id: Option<UserId>,
         _data: &<Self as ModelWrite>::Write,
     ) -> Result<(), AuthError> {
         let Some(user_id) = user_id else {
             return Err(AuthError::Unauthenticated);
         };
-        let Some(owner) = Model::owner(conn, id).await? else {
+        let Some(owner) = ModelImpl::owner(conn, id).await? else {
             return Err(AuthError::Unauthorized);
         };
 

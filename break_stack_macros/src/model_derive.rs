@@ -51,9 +51,15 @@ pub fn impl_model_macro(ast: &syn::DeriveInput) -> TokenStream {
     let model_name = args
         .get("name")
         .expect("model attribute requires a field called name");
+    let model_id_type = args
+        .get("id_type")
+        .map(|s| s.parse::<Type>().expect("id_type needs to be a valid type"))
+        .map(|ty| quote_spanned! {ty.span()=>#ty})
+        .unwrap_or_else(|| quote! {i64});
 
     let gen = quote! {
         impl Model for #name {
+            type ID = #model_id_type;
             const MODEL_NAME: &'static str = #model_name;
         }
     };
@@ -77,11 +83,19 @@ pub fn impl_model_read_macro(ast: &syn::DeriveInput) -> TokenStream {
     let query = args
         .get("query")
         .expect("model_read attribute requires a field called query");
+    let fields = args
+        .get("fields")
+        .map(|f| {
+            f.parse_with(Punctuated::<Expr, Comma>::parse_terminated)
+                .expect("fields attribute should be valid expressions separated by a comma")
+        })
+        .map(|f| quote_spanned! {f.span()=>#f})
+        .unwrap_or_else(|| quote! {id});
 
     let gen = quote! {
         impl ModelRead for #name {
-            async fn read(conn: &mut ::break_stack::models::DBConn, id: i64) -> Result<Option<Self>, ::break_stack::errors::ModelError> {
-                let row = sqlx::query_as!(Self, #query, id)
+            async fn read(conn: &mut ::break_stack::models::DBConn, id: <Self as Model>::ID) -> Result<Option<Self>, ::break_stack::errors::ModelError> {
+                let row = sqlx::query_as!(Self, #query, #fields)
                     .fetch_optional(&mut **conn)
                     .await?;
 
@@ -126,7 +140,7 @@ pub fn impl_model_write_macro(ast: &syn::DeriveInput) -> TokenStream {
 
             async fn write(
                 conn: &mut ::break_stack::models::DBConn,
-                id: i64,
+                id: <Self as Model>::ID,
                 data: Self::Write,
             ) -> Result<Option<Self>, ::break_stack::errors::ModelError> {
                 let row = sqlx::query_as!(
@@ -212,6 +226,15 @@ pub fn impl_with_owner_model_macro(ast: &syn::DeriveInput) -> TokenStream {
         .get("query_owner")
         .expect("with_owner_model attribute requires a field called query_owner");
 
+    let query_owner_fields = args
+        .get("query_owner_fields")
+        .map(|f| {
+            f.parse_with(Punctuated::<Expr, Comma>::parse_terminated)
+                .expect("fields attribute should be valid expressions separated by a comma")
+        })
+        .map(|f| quote_spanned! {f.span()=>#f})
+        .unwrap_or_else(|| quote! {id});
+
     let query_all = args
         .get("query_all")
         .expect("with_owner_model attribute requires a field called query_all");
@@ -220,9 +243,9 @@ pub fn impl_with_owner_model_macro(ast: &syn::DeriveInput) -> TokenStream {
         impl WithOwnerModel for #name {
             async fn owner(
                 conn: &mut DBConn,
-                id: i64,
+                id: <Self as Model>::ID,
             ) -> Result<Option<i64>, ::break_stack::errors::ModelError> {
-                let row = sqlx::query!(#query_owner, id)
+                let row = sqlx::query!(#query_owner, #query_owner_fields)
                     .fetch_optional(&mut **conn)
                     .await?;
 
@@ -275,6 +298,8 @@ mod test {
         let result = impl_model_macro(&input);
         let expected = r#"
             impl Model for TestModel {
+                type ID = i64;
+
                 const MODEL_NAME: &'static str = "Test";
             }
             "#;
@@ -302,7 +327,7 @@ mod test {
         let result = impl_model_read_macro(&input);
         let expected = r#"
             impl ModelRead for TestModel {
-                async fn read(conn: &mut ::break_stack::models::DBConn, id: i64) -> Result<Option<Self>, ::break_stack::errors::ModelError> {
+                async fn read(conn: &mut ::break_stack::models::DBConn, id: <Self as Model>::ID) -> Result<Option<Self>, ::break_stack::errors::ModelError> {
                     let row = sqlx::query_as!(Self, "SELECT * FROM test WHERE id = ?", id)
                         .fetch_optional(&mut **conn)
                         .await?;
@@ -343,7 +368,7 @@ mod test {
 
                 async fn write(
                     conn: &mut ::break_stack::models::DBConn,
-                    id: i64,
+                    id: <Self as Model>::ID,
                     data: Self::Write,
                 ) -> Result<Option<Self>, ::break_stack::errors::ModelError> {
                     let row = sqlx::query_as!(
@@ -433,7 +458,7 @@ mod test {
             impl WithOwnerModel for TestModel {
                 async fn owner(
                     conn: &mut DBConn,
-                    id: i64,
+                    id: <Self as Model>::ID,
                 ) -> Result<Option<i64>, ::break_stack::errors::ModelError> {
                     let row = sqlx::query!("SELECT owner FROM test WHERE id = ?", id)
                         .fetch_optional(&mut **conn)

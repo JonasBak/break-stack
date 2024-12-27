@@ -14,6 +14,8 @@ struct TestModel {
     field: i64,
 }
 impl Model for TestModel {
+    type ID = i64;
+
     const MODEL_NAME: &'static str = "Test";
 }
 impl ModelRead for TestModel {

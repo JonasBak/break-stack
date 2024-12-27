@@ -25,7 +25,7 @@ pub trait InitController {
 
 pub async fn model_controller_read<H: ModelController<Model: AuthModelRead>>(
     mut conn: DBConn,
-    id: Path<i64>,
+    id: Path<<H::Model as Model>::ID>,
     user_id: Option<UserId>,
 ) -> AppResult<Response> {
     <H::Model as AuthModelRead>::can_read(&mut conn, *id, user_id).await?;
@@ -38,7 +38,7 @@ pub async fn model_controller_read<H: ModelController<Model: AuthModelRead>>(
 
 pub async fn model_controller_write<H: ModelController<Model: AuthModelWrite>>(
     mut conn: DBConn,
-    id: Path<i64>,
+    id: Path<<H::Model as Model>::ID>,
     user_id: Option<UserId>,
     Form(data): Form<<H::Model as ModelWrite>::Write>,
 ) -> AppResult<Response> {
