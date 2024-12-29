@@ -7,46 +7,12 @@ use syn::{
     parse::Parser, punctuated::Punctuated, token::Comma, Attribute, DataStruct, Expr, Field,
     Fields, FieldsNamed, Ident, Lit, LitStr, MetaList, MetaNameValue, Type,
 };
-
-fn get_attr(ast: &syn::DeriveInput, attr_name: &str) -> Option<HashMap<String, LitStr>> {
-    let mut matched_args = None;
-    for attr in &ast.attrs {
-        if !attr.path().is_ident(attr_name) {
-            continue;
-        }
-
-        match attr.parse_args_with(Punctuated::<MetaNameValue, syn::Token![,]>::parse_terminated) {
-            Ok(args) if matched_args.is_none() => matched_args = Some(args),
-            Ok(_) => panic!("duplicated '{}' attribute", attr_name),
-            Err(e) => panic!("unable to parse template arguments: {e}"),
-        };
-    }
-    Some(
-        matched_args?
-            .into_iter()
-            .map(|kv| {
-                (
-                    kv.path
-                        .require_ident()
-                        .expect("key should be simple ident")
-                        .to_string(),
-                    match kv.value {
-                        Expr::Lit(syn::ExprLit {
-                            lit: Lit::Str(lit_str),
-                            ..
-                        }) => lit_str,
-                        _ => panic!(),
-                    },
-                )
-            })
-            .collect(),
-    )
-}
+use super::utils::get_input_attr;
 
 pub fn impl_model_macro(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
 
-    let args = get_attr(ast, "model").expect("deriving Model requires a model attribute");
+    let args = get_input_attr(ast, "model").expect("deriving Model requires a model attribute");
 
     let model_name = args
         .get("name")
@@ -78,7 +44,7 @@ pub fn impl_model_read_macro(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
 
     let args =
-        get_attr(ast, "model_read").expect("deriving ModelRead requires a model_read attribute");
+        get_input_attr(ast, "model_read").expect("deriving ModelRead requires a model_read attribute");
 
     let query = args
         .get("query")
@@ -118,7 +84,7 @@ pub fn impl_model_write_macro(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
 
     let args =
-        get_attr(ast, "model_write").expect("deriving ModelWrite requires a model_write attribute");
+        get_input_attr(ast, "model_write").expect("deriving ModelWrite requires a model_write attribute");
 
     let query = args
         .get("query")
@@ -169,7 +135,7 @@ pub fn impl_model_write_macro(ast: &syn::DeriveInput) -> TokenStream {
 pub fn impl_model_create_macro(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
 
-    let args = get_attr(ast, "model_create")
+    let args = get_input_attr(ast, "model_create")
         .expect("deriving ModelCreate requires a model_create attribute");
 
     let query = args
@@ -219,7 +185,7 @@ pub fn impl_model_create_macro(ast: &syn::DeriveInput) -> TokenStream {
 pub fn impl_model_delete_macro(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
 
-    let args = get_attr(ast, "model_delete")
+    let args = get_input_attr(ast, "model_delete")
         .expect("deriving ModelDelete requires a model_delete attribute");
 
     let query = args
@@ -259,7 +225,7 @@ pub fn impl_model_delete_macro(ast: &syn::DeriveInput) -> TokenStream {
 pub fn impl_with_owner_model_macro(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
 
-    let args = get_attr(ast, "with_owner_model")
+    let args = get_input_attr(ast, "with_owner_model")
         .expect("deriving WithOwnerModel requires a with_owner_model attribute");
 
     let query_owner = args

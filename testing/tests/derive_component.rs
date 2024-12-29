@@ -12,6 +12,16 @@ pub struct CompilingPrimitiveComponent {
 }
 
 #[derive(Component)]
+#[template(source = r#"Hello"#, ext = "html")]
+pub struct CompilingWithAttrComponent {
+    #[component(
+        ref_type = "Vec<TestingComponentRef<'a>>",
+        to_ref_setter = "value.testing.iter().map(|v| v.as_ref()).collect()"
+    )]
+    testing: Vec<TestingComponent>,
+}
+
+#[derive(Component)]
 #[template(source = r#"Hello {{ name }}"#, ext = "html")]
 pub struct TestingComponent {
     name: String,

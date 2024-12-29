@@ -1,8 +1,9 @@
 mod bundle_files;
 mod component_derive;
 mod model_derive;
+mod utils;
 
-#[proc_macro_derive(Component, attributes(template))]
+#[proc_macro_derive(Component, attributes(template, component))]
 pub fn component_derive(input: proc_macro::TokenStream) -> proc_macro::TokenStream {
     let ast = syn::parse(input).unwrap();
 

@@ -1,8 +1,9 @@
+use super::utils::get_field_attr;
 use proc_macro2::TokenStream;
 use quote::{format_ident, quote, quote_spanned};
 use std::collections::BTreeMap;
 use syn::spanned::Spanned;
-use syn::{Attribute, DataStruct, Field, Fields, FieldsNamed, Ident, Type};
+use syn::{Attribute, DataStruct, Expr, Field, Fields, FieldsNamed, Ident, Type};
 
 pub fn impl_component_macro(ast: &syn::DeriveInput) -> TokenStream {
     let component_impl_component = component_impl_component(ast);
@@ -223,6 +224,14 @@ fn component_ref_impl_from_component(ast: &syn::DeriveInput) -> TokenStream {
             .ident
             .as_ref()
             .expect("only named fields are supported");
+        if let Some(attrs) = get_field_attr(field, "component") {
+            if let Some(to_ref_setter_str) = attrs.get("to_ref_setter") {
+                let to_ref_setter = to_ref_setter_str
+                    .parse::<Expr>()
+                    .expect("to_ref_setter should be string containing valid expression");
+                return quote_spanned! {to_ref_setter_str.span()=>#ident: #to_ref_setter};
+            }
+        }
         if field_is_primitive(field) {
             quote!(#ident: value.#ident)
         } else if matches!(field_type_path_ident(field), Some(ident) if ident == "Option") {
@@ -255,6 +264,14 @@ fn field_type_path_ident(field: &Field) -> Option<&Ident> {
 }
 
 fn component_ref_field_type(field: &Field, ref_primitive: bool) -> TokenStream {
+    if let Some(attrs) = get_field_attr(field, "component") {
+        if let Some(ref_type_str) = attrs.get("ref_type") {
+            let ty = ref_type_str
+                .parse::<Type>()
+                .expect("ref_type should be string containing valid type");
+            return quote_spanned! {ref_type_str.span()=>#ty};
+        }
+    }
     let ty = &field.ty;
     match ty {
         Type::Path(type_path) => {
@@ -309,6 +326,14 @@ fn component_ref_generics_from_types<'a>(
     fields
         .named
         .iter()
+        .filter(|field| {
+            if let Some(attrs) = get_field_attr(field, "component") {
+                if let Some(to_ref_setter_str) = attrs.get("ref_type") {
+                    return false;
+                }
+            };
+            true
+        })
         .filter_map(|field| match &field.ty {
             Type::Path(type_path) => {
                 match type_path
@@ -388,7 +413,6 @@ fn component_impl_component_as_ref(ast: &syn::DeriveInput) -> TokenStream {
     let generics_ext = generics.values().map(|(_, ref g)| match g {
         GenericForRef::Vec(ty) => quote! {Vec<#ty>},
     });
-
 
     let lifetime = input_needs_lifetime(ast).then(|| quote! {'a}).into_iter();
 
@@ -514,6 +538,10 @@ mod test {
             field_e: Option<Abc>,
             field_f: Result<A, B>,
             field_g: Vec<Abc>,
+            #[component(ref_type = "(&'a StructA, &'a StructB)", to_ref_setter = "(&value.with_attr.0, &value.with_attr.1)")]
+            with_attr: (StructA, StructB),
+            #[component(ref_type = "Vec<(&'a StructA, &'a StructB)>", to_ref_setter = "TODO")]
+            vec_with_attr: Vec<(StructA, StructB)>,
         }
         "#,
         )
@@ -532,6 +560,8 @@ mod test {
                 pub field_e: Option<&'a Abc>,
                 pub field_f: &'a Result<A, B>,
                 pub field_g: FieldG,
+                pub with_attr: (&'a StructA, &'a StructB),
+                pub vec_with_attr: Vec<(&'a StructA, &'a StructB)>,
             }"#,
         );
         assert_eq!(result, expected);
@@ -597,6 +627,10 @@ mod test {
             pub field_e: Option<Abc>,
             pub field_f: Result<A, B>,
             pub field_g: Vec<Abc>,
+            #[component(ref_type = "(&'a StructA, &'a StructB)", to_ref_setter = "(&value.with_attr.0, &value.with_attr.1)")]
+            with_attr: (StructA, StructB),
+            #[component(ref_type = "Vec<(&'a StructA, &'a StructB)>", to_ref_setter = "TODO")]
+            vec_with_attr: Vec<(StructA, StructB)>,
         }
         "#,
         )
@@ -606,7 +640,7 @@ mod test {
         let expected = remove_whitespace(
             r#"
             impl<'a, FieldG: IntoIterator<Item = &'a Abc> + Clone> MyComponentRef<'a, FieldG> {
-                pub fn new(field_a: &'a A, field_b: bool, field_c: &'a str, field_d: usize, field_e: Option<&'a Abc>, field_f: &'a Result<A, B>, field_g: FieldG) -> Self {
+                pub fn new(field_a: &'a A, field_b: bool, field_c: &'a str, field_d: usize, field_e: Option<&'a Abc>, field_f: &'a Result<A, B>, field_g: FieldG, with_attr: (&'a StructA, &'a StructB), vec_with_attr: Vec<(&'a StructA, &'a StructB)>) -> Self {
                     Self {
                         field_a,
                         field_b,
@@ -615,6 +649,8 @@ mod test {
                         field_e,
                         field_f,
                         field_g,
+                        with_attr,
+                        vec_with_attr,
                     }
                 }
             }"#,
@@ -634,6 +670,13 @@ mod test {
             pub field_e: Option<Abc>,
             pub field_f: Result<A, B>,
             pub field_g: Vec<Abc>,
+            #[component(ref_type = "(&'a StructA, &'a StructB)", to_ref_setter = "(&value.with_attr.0, &value.with_attr.1)")]
+            with_attr: (StructA, StructB),
+            #[component(
+                ref_type = "Vec<TestingComponentRef<'a>>",
+                to_ref_setter = "value.testing.iter().map(|v| v.as_ref()).collect()"
+            )]
+            vec_with_attr: Vec<TestingComponent>,
         }
         "#,
         )
@@ -653,6 +696,8 @@ mod test {
                     field_e: value.field_e.as_ref(),
                     field_f: &value.field_f,
                     field_g: &value.field_g,
+                    with_attr: (&value.with_attr.0, &value.with_attr.1),
+                    vec_with_attr: value.testing.iter().map(|v| v.as_ref()).collect(),
                 }
             }
         }
