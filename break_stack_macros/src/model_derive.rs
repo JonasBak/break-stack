@@ -216,6 +216,46 @@ pub fn impl_model_create_macro(ast: &syn::DeriveInput) -> TokenStream {
     gen.into()
 }
 
+pub fn impl_model_delete_macro(ast: &syn::DeriveInput) -> TokenStream {
+    let name = &ast.ident;
+
+    let args = get_attr(ast, "model_delete")
+        .expect("deriving ModelDelete requires a model_delete attribute");
+
+    let query = args
+        .get("query")
+        .expect("model_delete attribute requires a field called query");
+    let fields = args
+        .get("fields")
+        .map(|f| {
+            f.parse_with(Punctuated::<Expr, Comma>::parse_terminated)
+                .expect("fields attribute should be valid expressions separated by a comma")
+        })
+        .map(|f| quote_spanned! {f.span()=>#f})
+        .unwrap_or_else(|| quote! {id});
+
+    let gen = quote! {
+        impl ModelDelete for #name {
+            async fn delete(conn: &mut ::break_stack::models::DBConn, id: <Self as Model>::ID) -> Result<Self, ::break_stack::errors::ModelError> {
+                let row = sqlx::query_as!(Self, #query, #fields)
+                    .fetch_one(&mut **conn)
+                    .await?;
+
+                Ok(row)
+            }
+        }
+    };
+
+    if std::env::var("BREAK_STACK_PRINT_DERIVE")
+        .map(|s| s == "1")
+        .unwrap_or(false)
+    {
+        println!("Generated code: {}", gen.clone().to_string());
+    }
+
+    gen.into()
+}
+
 pub fn impl_with_owner_model_macro(ast: &syn::DeriveInput) -> TokenStream {
     let name = &ast.ident;
 
@@ -426,6 +466,39 @@ mod test {
                     .fetch_one(&mut **conn)
                     .await?;
                     Ok(t)
+                }
+            }
+            "#;
+
+        assert_eq!(
+            remove_whitespace(&result.to_string()),
+            remove_whitespace(&expected.to_string())
+        );
+    }
+
+    #[test]
+    fn test_impl_model_delete_macro() {
+        let input = syn::parse_str::<syn::DeriveInput>(
+            r#"
+            #[derive(ModelDelete)]
+            #[model_delete(query = "DELETE FROM test WHERE id = ? RETURNING *")]
+            struct TestModel {
+                pub id: i64,
+                pub field: String,
+            }
+            "#,
+        )
+        .unwrap();
+
+        let result = impl_model_delete_macro(&input);
+        let expected = r#"
+            impl ModelDelete for TestModel {
+                async fn delete(conn: &mut ::break_stack::models::DBConn, id: <Self as Model>::ID) -> Result<Self, ::break_stack::errors::ModelError> {
+                    let row = sqlx::query_as!(Self, "DELETE FROM test WHERE id = ? RETURNING *", id)
+                        .fetch_one(&mut **conn)
+                        .await?;
+
+                    Ok(row)
                 }
             }
             "#;

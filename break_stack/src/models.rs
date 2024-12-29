@@ -1,6 +1,6 @@
 use crate::auth::UserId;
 use crate::errors::{AuthError, ModelError};
-pub use break_stack_macros::{Model, ModelCreate, ModelRead, ModelWrite, WithOwnerModel};
+pub use break_stack_macros::{Model, ModelCreate, ModelRead, ModelWrite, ModelDelete, WithOwnerModel};
 
 pub type DBConn = sqlx::pool::PoolConnection<sqlx::Sqlite>;
 
@@ -13,6 +13,9 @@ pub trait Model {
     }
     fn event_updated() -> String {
         format!("{}Updated", Self::MODEL_NAME)
+    }
+    fn event_deleted() -> String {
+        format!("{}Deleted", Self::MODEL_NAME)
     }
 }
 
@@ -92,6 +95,13 @@ pub trait ModelCreate: Sized + Model {
     ) -> impl std::future::Future<Output = Result<Self, ModelError>> + Send;
 }
 
+pub trait ModelDelete: Sized + Model {
+    fn delete(
+        conn: &mut DBConn,
+        id: <Self as Model>::ID,
+    ) -> impl std::future::Future<Output = Result<Self, ModelError>> + Send;
+}
+
 /// Trait for authentication and authorization checks for reading an object.
 pub trait AuthModelRead: ModelRead {
     fn can_read(
@@ -121,6 +131,14 @@ pub trait AuthModelCreate: ModelCreate {
         conn: &mut DBConn,
         user_id: Option<UserId>,
         data: &<Self as ModelCreate>::Create,
+    ) -> impl std::future::Future<Output = Result<(), AuthError>> + Send;
+}
+
+pub trait AuthModelDelete: ModelDelete {
+    fn can_delete(
+        conn: &mut DBConn,
+        id: <Self as Model>::ID,
+        user_id: Option<UserId>,
     ) -> impl std::future::Future<Output = Result<(), AuthError>> + Send;
 }
 
@@ -155,6 +173,55 @@ impl<ModelImpl: OwnerAuthModelWrite> AuthModelWrite for ModelImpl {
         id: <Self as Model>::ID,
         user_id: Option<UserId>,
         _data: &<Self as ModelWrite>::Write,
+    ) -> Result<(), AuthError> {
+        let Some(user_id) = user_id else {
+            return Err(AuthError::Unauthenticated);
+        };
+        let Some(owner) = ModelImpl::owner(conn, id).await? else {
+            return Err(AuthError::Unauthorized);
+        };
+
+        if owner != *user_id {
+            return Err(AuthError::Unauthorized);
+        }
+
+        Ok(())
+    }
+}
+
+pub trait OwnerAuthModelCreate: WithOwnerModel + ModelCreate {
+    fn will_be_owner(
+        conn: &mut DBConn,
+        data: &<Self as ModelCreate>::Create,
+    ) -> impl std::future::Future<Output = Result<i64, ModelError>> + Send;
+}
+
+impl<ModelImpl: OwnerAuthModelCreate> AuthModelCreate for ModelImpl {
+    async fn can_create(
+        conn: &mut DBConn,
+        user_id: Option<UserId>,
+        data: &<Self as ModelCreate>::Create,
+    ) -> Result<(), AuthError> {
+        let Some(user_id) = user_id else {
+            return Err(AuthError::Unauthenticated);
+        };
+        let owner = <ModelImpl as OwnerAuthModelCreate>::will_be_owner(conn, data).await?;
+
+        if owner != *user_id {
+            return Err(AuthError::Unauthorized);
+        }
+
+        Ok(())
+    }
+}
+
+pub trait OwnerAuthModelDelete: WithOwnerModel + ModelDelete {}
+
+impl<ModelImpl: OwnerAuthModelDelete> AuthModelDelete for ModelImpl {
+    async fn can_delete(
+        conn: &mut DBConn,
+        id: <Self as Model>::ID,
+        user_id: Option<UserId>,
     ) -> Result<(), AuthError> {
         let Some(user_id) = user_id else {
             return Err(AuthError::Unauthenticated);

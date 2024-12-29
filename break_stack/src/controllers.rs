@@ -86,6 +86,30 @@ pub async fn model_controller_create<H: ModelController<Model: AuthModelCreate>>
     Ok(response)
 }
 
+pub async fn model_controller_delete<H: ModelController<Model: AuthModelDelete>>(
+    mut conn: DBConn,
+    id: Path<<H::Model as Model>::ID>,
+    user_id: Option<UserId>,
+) -> AppResult<Response> {
+    <H::Model as AuthModelDelete>::can_delete(&mut conn, *id, user_id).await?;
+
+    let item = <H::Model as ModelDelete>::delete(&mut conn, *id).await?;
+
+    let mut response = H::build_response(&mut conn, user_id, item).await?;
+    response.headers_mut().insert(
+        "HX-Trigger",
+        <H::Model as Model>::event_deleted()
+            .parse::<HeaderValue>()
+            .map_err(|e| {
+                AppError::Internal(format!(
+                    "failed to build HX-Trigger header: {}",
+                    e.to_string()
+                ))
+            })?,
+    );
+    Ok(response)
+}
+
 pub async fn init_controller_from_query<C: InitController>(
     mut conn: DBConn,
     user_id: Option<UserId>,
