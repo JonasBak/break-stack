@@ -12,7 +12,7 @@ use break_stack::utils::askama::filters;
             {% else %}
                 <span>{{ item.description }}</span>
             {% endif %}
-            <button type="button" hx-get="/htmx/items/{{ item.id }}/edit" class="btn primary">
+            <button type="button" hx-get="{{ crate::routes::route_paths::htmx_items_id_edit(item.id) }}">
                 Click To Edit
             </button>
         </div>
